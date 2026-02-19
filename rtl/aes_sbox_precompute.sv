@@ -77,9 +77,9 @@ module aes_sbox_precompute
           automatic logic [7:0] x  = a ^ mc_i[j];
           automatic logic [7:0] sx;
           if (!enc_dec_i)
-            sx = SBOX_FWD[x];
+            sx = sbox_fwd_cmt_fn(x);  // CMT gate-level forward S-box
           else
-            sx = SBOX_INV[x];
+            sx = SBOX_INV[x];         // inverse S-box table (unchanged)
           table_mem[j][a] <= sx ^ mc_i[j];
         end
       end

@@ -177,11 +177,85 @@ package aes_pkg;
   endfunction
 
   // -------------------------------------------------------------------------
-  // SubWord: apply S-box to each byte of a 32-bit word
+  // Forward S-Box — CMT gate-level implementation (Boyar-Matthews-Peralta)
+  // Replaces the ROM lookup for enc SubBytes and key schedule SubWord.
+  // Bit mapping: U0=in[7] (MSB), out={S0,S1,S2,S3,S4,S5,S6,S7} (S0=MSB).
+  // -------------------------------------------------------------------------
+  function automatic logic [7:0] sbox_fwd_cmt_fn(input logic [7:0] ib);
+    logic U0, U1, U2, U3, U4, U5, U6, U7;
+    logic y14, y13, y9, y8, t0f, y1, y4, y12;
+    logic y2, y5, y3, t1f, y15, y20, y6, y10;
+    logic y11, y7, y17, y19, y16, y21, y18;
+    logic t2,  t3,  t4,  t5,  t6,  t7,  t8,  t9,  t10, t11;
+    logic t12, t13, t14, t15, t16, t17, t18, t19, t20, t21;
+    logic t22, t23, t24, t25, t26, t27, t28, t29, t30, t31;
+    logic t32, t33, t34, t35, t36, t37, t38, t39, t40, t41;
+    logic t42, t43, t44, t45;
+    logic z0,  z1,  z2,  z3,  z4,  z5,  z6,  z7,  z8,  z9;
+    logic z10, z11, z12, z13, z14, z15, z16, z17;
+    logic tc1,  tc2,  tc3,  tc4,  tc5,  tc6,  tc7,  tc8,  tc9;
+    logic tc10, tc11, tc12, tc13, tc14, tc16, tc17, tc18, tc20, tc21, tc26;
+    logic S0, S1, S2, S3, S4, S5, S6, S7;
+
+    {U0,U1,U2,U3,U4,U5,U6,U7} = ib;  // U0=ib[7], U7=ib[0]
+
+    y14 = U3  ^ U5;  y13 = U0  ^ U6;  y9  = U0  ^ U3;  y8  = U0  ^ U5;
+    t0f = U1  ^ U2;  y1  = t0f ^ U7;  y4  = y1  ^ U3;  y12 = y13 ^ y14;
+    y2  = y1  ^ U0;  y5  = y1  ^ U6;  y3  = y5  ^ y8;
+    t1f = U4  ^ y12; y15 = t1f ^ U5;  y20 = t1f ^ U1;
+    y6  = y15 ^ U7;  y10 = y15 ^ t0f; y11 = y20 ^ y9;
+    y7  = U7  ^ y11; y17 = y10 ^ y11; y19 = y10 ^ y8;
+    y16 = t0f ^ y11; y21 = y13 ^ y16; y18 = U0  ^ y16;
+
+    t2  = y12 & y15; t3  = y3  & y6;  t4  = t3  ^ t2;
+    t5  = y4  & U7;  t6  = t5  ^ t2;  t7  = y13 & y16;
+    t8  = y5  & y1;  t9  = t8  ^ t7;  t10 = y2  & y7;
+    t11 = t10 ^ t7;  t12 = y9  & y11; t13 = y14 & y17;
+    t14 = t13 ^ t12; t15 = y8  & y10; t16 = t15 ^ t12;
+    t17 = t4  ^ y20; t18 = t6  ^ t16; t19 = t9  ^ t14;
+    t20 = t11 ^ t16; t21 = t17 ^ t14; t22 = t18 ^ y19;
+    t23 = t19 ^ y21; t24 = t20 ^ y18; t25 = t21 ^ t22;
+    t26 = t21 & t23; t27 = t24 ^ t26; t28 = t25 & t27;
+    t29 = t28 ^ t22; t30 = t23 ^ t24; t31 = t22 ^ t26;
+    t32 = t31 & t30; t33 = t32 ^ t24; t34 = t23 ^ t33;
+    t35 = t27 ^ t33; t36 = t24 & t35; t37 = t36 ^ t34;
+    t38 = t27 ^ t36; t39 = t29 & t38; t40 = t25 ^ t39;
+    t41 = t40 ^ t37; t42 = t29 ^ t33; t43 = t29 ^ t40;
+    t44 = t33 ^ t37; t45 = t42 ^ t41;
+
+    z0  = t44 & y15; z1  = t37 & y6;  z2  = t33 & U7;
+    z3  = t43 & y16; z4  = t40 & y1;  z5  = t29 & y7;
+    z6  = t42 & y11; z7  = t45 & y17; z8  = t41 & y10;
+    z9  = t44 & y12; z10 = t37 & y3;  z11 = t33 & y4;
+    z12 = t43 & y13; z13 = t40 & y5;  z14 = t29 & y2;
+    z15 = t42 & y9;  z16 = t45 & y14; z17 = t41 & y8;
+
+    tc1  = z15  ^ z16; tc2  = z10  ^ tc1;  tc3  = z9   ^ tc2;
+    tc4  = z0   ^ z2;  tc5  = z1   ^ z0;   tc6  = z3   ^ z4;
+    tc7  = z12  ^ tc4; tc8  = z7   ^ tc6;  tc9  = z8   ^ tc7;
+    tc10 = tc8  ^ tc9; tc11 = tc6  ^ tc5;  tc12 = z3   ^ z5;
+    tc13 = z13  ^ tc1; tc14 = tc4  ^ tc12;
+    S3   = tc3  ^ tc11;
+    tc16 = z6   ^ tc8; tc17 = z14  ^ tc10; tc18 = tc13 ^ tc14;
+    S7   = ~(z12  ^ tc18);
+    tc20 = z15  ^ tc16; tc21 = tc2 ^ z11;
+    S0   = tc3  ^ tc16;
+    S6   = ~(tc10 ^ tc18);
+    S4   = tc14 ^ S3;
+    S1   = ~(S3  ^ tc16);
+    tc26 = tc17 ^ tc20;
+    S2   = ~(tc26 ^ z17);
+    S5   = tc21 ^ tc17;
+
+    return {S0, S1, S2, S3, S4, S5, S6, S7};
+  endfunction
+
+  // -------------------------------------------------------------------------
+  // SubWord: apply forward S-box to each byte of a 32-bit word (key schedule)
   // -------------------------------------------------------------------------
   function automatic logic [31:0] sub_word(input logic [31:0] w);
-    return {SBOX_FWD[w[31:24]], SBOX_FWD[w[23:16]],
-            SBOX_FWD[w[15:8]],  SBOX_FWD[w[7:0]]};
+    return {sbox_fwd_cmt_fn(w[31:24]), sbox_fwd_cmt_fn(w[23:16]),
+            sbox_fwd_cmt_fn(w[15:8]),  sbox_fwd_cmt_fn(w[7:0])};
   endfunction
 
   // -------------------------------------------------------------------------
