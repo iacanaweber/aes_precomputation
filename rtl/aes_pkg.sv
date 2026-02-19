@@ -251,6 +251,82 @@ package aes_pkg;
   endfunction
 
   // -------------------------------------------------------------------------
+  // Inverse S-Box — CMT gate-level implementation (Boyar-Matthews-Peralta)
+  // Same bit convention as forward S-Box: U0=in[7] (MSB), W0=out[7] (MSB).
+  // -------------------------------------------------------------------------
+  function automatic logic [7:0] sbox_inv_cmt_fn(input logic [7:0] ib);
+    logic U0, U1, U2, U3, U4, U5, U6, U7;
+    logic T23, T22, T2,  T1,  T24, R5;
+    logic T8,  T19, T9,  T10, T13, T3;
+    logic T25, R13, T17, T20, T4;
+    logic R17, R18, R19, Y5;
+    logic T6,  T16, T27, T15, T14, T26;
+    logic M1,  M2,  M3,  M4,  M5,  M6,  M7,  M8,  M9,  M10;
+    logic M11, M12, M13, M14, M15, M16, M17, M18, M19, M20;
+    logic M21, M22, M23, M24, M25, M26, M27, M28, M29, M30;
+    logic M31, M32, M33, M34, M35, M36, M37, M38, M39, M40;
+    logic M41, M42, M43, M44, M45;
+    logic M46, M47, M48, M49, M50, M51, M52, M53, M54, M55;
+    logic M56, M57, M58, M59, M60, M61, M62, M63;
+    logic P0,  P1,  P2,  P3,  P4,  P5,  P6,  P7,  P8,  P9;
+    logic P10, P11, P12, P13, P14, P15, P16, P17, P18, P19;
+    logic P20, P22, P23, P24, P25, P26, P27, P28, P29;
+    logic W0, W1, W2, W3, W4, W5, W6, W7;
+
+    {U0,U1,U2,U3,U4,U5,U6,U7} = ib;
+
+    T23 = U0  ^ U3;      T22 = ~(U1  ^ U3);   T2  = ~(U0  ^ U1);
+    T1  = U3  ^ U4;      T24 = ~(U4  ^ U7);   R5  = U6  ^ U7;
+    T8  = ~(U1  ^ T23);  T19 = T22 ^ R5;      T9  = ~(U7  ^ T1);
+    T10 = T2  ^ T24;     T13 = T2  ^ R5;      T3  = T1  ^ R5;
+    T25 = ~(U2  ^ T1);   R13 = U1  ^ U6;      T17 = ~(U2  ^ T19);
+    T20 = T24 ^ R13;     T4  = U4  ^ T8;      R17 = ~(U2  ^ U5);
+    R18 = ~(U5  ^ U6);   R19 = ~(U2  ^ U4);   Y5  = U0  ^ R17;
+    T6  = T22 ^ R17;     T16 = R13 ^ R19;     T27 = T1  ^ R18;
+    T15 = T10 ^ T27;     T14 = T10 ^ R18;     T26 = T3  ^ T16;
+
+    M1  = T13 & T6;   M2  = T23 & T8;   M3  = T14 ^ M1;
+    M4  = T19 & Y5;   M5  = M4  ^ M1;   M6  = T3  & T16;
+    M7  = T22 & T9;   M8  = T26 ^ M6;   M9  = T20 & T17;
+    M10 = M9  ^ M6;   M11 = T1  & T15;  M12 = T4  & T27;
+    M13 = M12 ^ M11;  M14 = T2  & T10;  M15 = M14 ^ M11;
+    M16 = M3  ^ M2;   M17 = M5  ^ T24;  M18 = M8  ^ M7;
+    M19 = M10 ^ M15;  M20 = M16 ^ M13;  M21 = M17 ^ M15;
+    M22 = M18 ^ M13;  M23 = M19 ^ T25;  M24 = M22 ^ M23;
+    M25 = M22 & M20;  M26 = M21 ^ M25;  M27 = M20 ^ M21;
+    M28 = M23 ^ M25;  M29 = M28 & M27;  M30 = M26 & M24;
+    M31 = M20 & M23;  M32 = M27 & M31;  M33 = M27 ^ M25;
+    M34 = M21 & M22;  M35 = M24 & M34;  M36 = M24 ^ M25;
+    M37 = M21 ^ M29;  M38 = M32 ^ M33;  M39 = M23 ^ M30;
+    M40 = M35 ^ M36;  M41 = M38 ^ M40;  M42 = M37 ^ M39;
+    M43 = M37 ^ M38;  M44 = M39 ^ M40;  M45 = M42 ^ M41;
+
+    M46 = M44 & T6;   M47 = M40 & T8;   M48 = M39 & Y5;
+    M49 = M43 & T16;  M50 = M38 & T9;   M51 = M37 & T17;
+    M52 = M42 & T15;  M53 = M45 & T27;  M54 = M41 & T10;
+    M55 = M44 & T13;  M56 = M40 & T23;  M57 = M39 & T19;
+    M58 = M43 & T3;   M59 = M38 & T22;  M60 = M37 & T20;
+    M61 = M42 & T1;   M62 = M45 & T4;   M63 = M41 & T2;
+
+    P0  = M52 ^ M61;  P1  = M58 ^ M59;  P2  = M54 ^ M62;
+    P3  = M47 ^ M50;  P4  = M48 ^ M56;  P5  = M46 ^ M51;
+    P6  = M49 ^ M60;  P7  = P0  ^ P1;   P8  = M50 ^ M53;
+    P9  = M55 ^ M63;  P10 = M57 ^ P4;   P11 = P0  ^ P3;
+    P12 = M46 ^ M48;  P13 = M49 ^ M51;  P14 = M49 ^ M62;
+    P15 = M54 ^ M59;  P16 = M57 ^ M61;  P17 = M58 ^ P2;
+    P18 = M63 ^ P5;   P19 = P2  ^ P3;   P20 = P4  ^ P6;
+    P22 = P2  ^ P7;   P23 = P7  ^ P8;   P24 = P5  ^ P7;
+    P25 = P6  ^ P10;  P26 = P9  ^ P11;  P27 = P10 ^ P18;
+    P28 = P11 ^ P25;  P29 = P15 ^ P20;
+
+    W0  = P13 ^ P22;  W1  = P26 ^ P29;  W2  = P17 ^ P28;
+    W3  = P12 ^ P22;  W4  = P23 ^ P27;  W5  = P19 ^ P24;
+    W6  = P14 ^ P23;  W7  = P9  ^ P16;
+
+    return {W0, W1, W2, W3, W4, W5, W6, W7};
+  endfunction
+
+  // -------------------------------------------------------------------------
   // SubWord: apply forward S-box to each byte of a 32-bit word (key schedule)
   // -------------------------------------------------------------------------
   function automatic logic [31:0] sub_word(input logic [31:0] w);

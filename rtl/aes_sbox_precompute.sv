@@ -79,7 +79,7 @@ module aes_sbox_precompute
           if (!enc_dec_i)
             sx = sbox_fwd_cmt_fn(x);  // CMT gate-level forward S-box
           else
-            sx = SBOX_INV[x];         // inverse S-box table (unchanged)
+            sx = sbox_inv_cmt_fn(x);  // CMT gate-level inverse S-box
           table_mem[j][a] <= sx ^ mc_i[j];
         end
       end
