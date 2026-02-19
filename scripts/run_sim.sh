@@ -10,8 +10,6 @@ cd "$SIM_DIR"
 RTL=(
   "$PROJ_DIR/rtl/aes_pkg.sv"
   "$PROJ_DIR/rtl/prng_simple.sv"
-  "$PROJ_DIR/rtl/aes_sbox_cmt.sv"
-  "$PROJ_DIR/rtl/aes_inv_sbox_cmt.sv"
   "$PROJ_DIR/rtl/aes_sbox_precompute.sv"
   "$PROJ_DIR/rtl/aes_key_schedule.sv"
   "$PROJ_DIR/rtl/aes_masked_core.sv"
