@@ -39,8 +39,12 @@ scheme remains valid across all rounds.
 
 For each byte position j (0..15) and address a (0..255):
 
-- **Encryption**: `T_j[a] = SBOX_FWD(a ⊕ Mc[j]) ⊕ Mc[j]`
-- **Decryption**: `T_j[a] = SBOX_INV(a ⊕ Mc[j]) ⊕ Mc[j]`
+- **Encryption**: `T_j[a] = sbox_fwd_cmt_fn(a ⊕ Mc[j]) ⊕ Mc[j]`
+- **Decryption**: `T_j[a] = sbox_inv_cmt_fn(a ⊕ Mc[j]) ⊕ Mc[j]`
+
+Both S-box functions are implemented as pure combinational gate-level circuits
+(Boyar-Matthews-Peralta / CMT networks: forward 113 gates, inverse ~140 gates).
+No ROM tables are used anywhere in the design.
 
 Only the table for the current operation mode (enc/dec) is precomputed.  Tables
 store 8-bit values (share-0 output only); shares 1+ are the constant base masks.
@@ -96,8 +100,8 @@ cycles).
   design, precompute runs per-operation; a future enhancement could cache tables
   when key/masks don't change.
 - **ENTRIES_PER_CYCLE** trades area for precompute latency.  At 16 entries/cycle,
-  the design instantiates 16×16 = 256 combinational S-box lookups during fill.
-  Reducing to 8 halves this to 128 lookups but doubles fill time.
+  the design evaluates 16×16 = 256 CMT S-box gates in parallel during fill.
+  Reducing to 8 halves this to 128 parallel evaluations but doubles fill time.
 
 ---
 
@@ -133,30 +137,34 @@ cycles).
 
 ```
 rtl/
-  aes_pkg.sv              — Types, S-box tables, GF(2^8) helpers
+  aes_pkg.sv              — Types, GF(2^8) helpers, Rcon, CMT S-Box functions
   prng_simple.sv          — xorshift128 PRNG
   aes_sbox_precompute.sv  — 16 parallel masked S-box table fill + lookup
   aes_key_schedule.sv     — Key expansion (all round keys stored)
   aes_masked_core.sv      — Top-level: FSM, masking, round datapath
 
 tb/
+  tb_aes_sbox_cmt.sv      — Forward S-box unit test (256 entries vs FIPS-197)
+  tb_aes_inv_sbox_cmt.sv  — Inverse S-box unit test (256 entries + 256 round-trips)
   tb_aes_masked_core.sv   — NIST vector tests, multi-seed, NSHARES=2+3
 
 scripts/
-  run_sim.sh              — ModelSim compile + run
+  run_sim.sh              — ModelSim compile + run (3 test suites)
 ```
 
 ---
 
 ## Verification Results
 
-All 25 tests pass (ModelSim 2020.1):
+All tests pass (ModelSim 2020.1):
 
-| Config    | Tests | Status |
-|-----------|-------|--------|
-| NSHARES=2 | 14    | PASS   |
-| NSHARES=3 | 11    | PASS   |
+| Suite                     | Checks | Status |
+|---------------------------|--------|--------|
+| Forward S-box unit test   | 256    | PASS   |
+| Inverse S-box unit test   | 512    | PASS   |
+| AES core integration (N=2)| 14     | PASS   |
+| AES core integration (N=3)| 11     | PASS   |
 
-Tests cover: AES-128/192/256 × ENC/DEC × multiple random seeds × FIPS-197
-Appendix B vector.  Ciphertext is deterministic regardless of mask seed, confirming
-correct mask handling.
+Integration tests cover: AES-128/192/256 × ENC/DEC × multiple random seeds ×
+FIPS-197 Appendix B vector.  Ciphertext is deterministic regardless of mask
+seed, confirming correct mask handling.
