@@ -74,6 +74,114 @@ combinationally.
 
 ---
 
+## Design Scheme
+
+### 1. Module Hierarchy
+
+```
+  ┌────────────────┐  masks[0..S-1][127:0]  ┌────────────────────────────────┐
+  │  prng_simple   ├───────────────────────►│                                │
+  │  (xorshift128) │                        │       Round Datapath           │
+  └────────────────┘                        │       (Main FSM)               │
+  ┌────────────────┐  rk[0..Nr][127:0]      │                                │
+  │ aes_key_sched  ├───────────────────────►│  S_IDLE    ◄── start_i        │
+  └────────────────┘                        │  S_PRECOMP ◄── enc_dec_i      │
+  ┌────────────────┐  sbox_out[0..15][7:0]  │  S_INIT    ◄── pt_i[127:0]   │
+  │ aes_sbox_prec  ├───────────────────────►│  S_ROUNDS  ◄── key_size_i     │
+  │  (16 × 256)    │◄── addr / fill_en ─────│  S_DONE    ──► done_o         │
+  └────────────────┘                        │            ──► ct_o[127:0]    │
+                                            └────────────────────────────────┘
+```
+
+### 2. FSM State Transitions
+
+```
+             start_i
+                │
+                ▼
+  ┌─────────┐     ┌──────────┐     ┌─────────┐     ┌──────────┐     ┌─────────┐
+  │ S_IDLE  │────►│S_PRECOMP │────►│ S_INIT  │────►│ S_ROUNDS │────►│ S_DONE  │
+  └────▲────┘     └──────────┘     └─────────┘     └──────────┘     └────┬────┘
+       │            (16/17 cy)        (1 cy)           (Nr cy)       (1 cy)│
+       │  no start_i                                                        │
+       └────────────────────────────────────────────────────────────────────┘
+              on start_i: S_DONE ──► S_PRECOMP directly (pulse not lost)
+
+  Key schedule FSM (runs concurrently during S_PRECOMP):
+    KS_IDLE ──► KS_LOAD ──► KS_EXPAND ──► KS_DONE
+```
+
+### 3. Per-Round Datapath (S_ROUNDS — one cycle per round)
+
+```
+  state_sh[0..S-1][127:0]    S masked shares of the 128-bit AES state
+          │
+          ▼
+  ┌──────────────────────────────────────────────────────────────┐
+  │  SubBytes       16 parallel table lookups                    │
+  │    addr_j = state_sh[0][byte_j]   (masked byte address)     │
+  │    out_j  = T_j[addr_j]           (masked S-box output)     │
+  │    shares 1..S-1 pass through unchanged                      │
+  └────────────────────────────┬─────────────────────────────────┘
+                               │
+                               ▼
+  ┌──────────────────────────────────────────────────────────────┐
+  │  [Inv]ShiftRows    byte permutation applied to every share   │
+  └────────────────────────────┬─────────────────────────────────┘
+                               │
+                               ▼
+  ┌──────────────────────────────────────────────────────────────┐
+  │  [Inv]MixColumns   GF(2⁸) mix on each share independently   │
+  │                    (linearity preserves masking)              │
+  │                    skipped on final round                     │
+  └────────────────────────────┬─────────────────────────────────┘
+                               │
+                               ▼
+  ┌──────────────────────────────────────────────────────────────┐
+  │  AddRoundKey       XOR round key into share-0 only           │
+  └────────────────────────────┬─────────────────────────────────┘
+                               │
+                               ▼
+  ┌──────────────────────────────────────────────────────────────┐
+  │  Mask Correction   restore base-mask form after MixColumns   │
+  │    enforces:  sh[0] ⊕ sh[1] [⊕ sh[2]] = x  for all bytes   │
+  └────────────────────────────┬─────────────────────────────────┘
+                               │
+                               ▼
+  state_sh[0..S-1][127:0]    updated shares (next round / S_DONE)
+```
+
+### 4. Masked Lookup Table Scheme
+
+```
+  ── S_PRECOMP: table construction ──────────────────────────────────────────
+  ┌────────────────────────────────────────────────────────────────────────┐
+  │  Combined mask  Mc[j]  for byte position j                            │
+  │    N=2:  Mc[j] = m[j]                                                 │
+  │    N=3:  Mc[j] = m1[j] ⊕ m2[j]                                       │
+  │                                                                        │
+  │  T_j[a] = CMT_fn( a ⊕ Mc[j] ) ⊕ Mc[j]      for a = 0..255          │
+  │            ──────────────────── ───────                               │
+  │            S-box of unmasked in  re-mask out                          │
+  │                                                                        │
+  │  16 tables × 16 entries/cycle × 16 cycles = 256 entries each          │
+  └────────────────────────────────────────────────────────────────────────┘
+
+  ── S_ROUNDS: lookup correctness ───────────────────────────────────────────
+  ┌────────────────────────────────────────────────────────────────────────┐
+  │  share-0 byte j = x_j ⊕ Mc[j]           ← masked plaintext byte      │
+  │                                                                        │
+  │  T_j[ x_j ⊕ Mc[j] ]                                                  │
+  │    = CMT_fn( x_j ⊕ Mc[j] ⊕ Mc[j] ) ⊕ Mc[j]                         │
+  │    = CMT_fn( x_j )                   ⊕ Mc[j]                         │
+  │    = SBox( x_j )                     ⊕ Mc[j]   ✓ output still masked │
+  │                                                                        │
+  │  Mc[j] never cancels in cleartext form during the lookup.             │
+  └────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## Cycle Counts
 
 | Mode     | Precompute | Init | Rounds (Nr) | Done | Total    |
